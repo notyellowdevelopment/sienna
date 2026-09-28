@@ -131,6 +131,15 @@
           "description": "Deleted Speedstars and Five Night's at Frickbears 3 Gamecards. Renamed Google Classroom prenamed cloak to include the - Classroom."
         }
       ]
+    },
+    {
+      "title": "Sienna v1.1.3 | Build 23",
+      "sections": [
+        {
+          "title": "Integrated gn-math interface, compressed background sizes, added history to update logs + minor patches",
+          "description": "Thank you for using sienna."
+        }
+      ]
     }
   ]
 }

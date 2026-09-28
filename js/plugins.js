@@ -8,11 +8,10 @@
   'use strict';
 
   // ───────────────────── CONFIG ─────────────────────
-  const STORAGE_KEY      = window.SiennaStorageKeys?.pluginsEnabled || 'plugins.enabled';
-  const HACK_STATES_KEY  = window.SiennaStorageKeys?.hackStates     || 'sienna.hackStates';
+  const STORAGE_KEY     = window.SiennaStorageKeys.pluginsEnabled;
+  const HACK_STATES_KEY = window.SiennaStorageKeys.hackStates;
 
-  const PLUGIN_FILES = [];
-  const HACK_FILES   = [
+  const HACK_FILES = [
     'monkeymart.js',
     'driftboss.js',
   ];
@@ -149,6 +148,64 @@
     .sienna-run-btn.active       { background: #e0e0e0; color: #050505; border-color: #e0e0e0; font-weight: 700; }
     .sienna-run-btn.active:hover { background: #c8c8c8; border-color: #c8c8c8; }
 
+    /* ── Inline storage value controls (dropdown / number) ── */
+    .sienna-value-wrap { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; }
+
+    .sienna-value-select,
+    .sienna-value-input {
+      height: 27px; box-sizing: border-box;
+      background: #0b0b0b; color: #d0d0d0;
+      border: 1px solid rgba(255,255,255,0.08); border-radius: 6px;
+      font-family: inherit; font-size: 11.5px; font-weight: 600;
+      outline: none; cursor: pointer; text-align: center;
+      transition: border-color 0.14s, color 0.14s, background 0.14s;
+      -webkit-appearance: none; -moz-appearance: none; appearance: none;
+    }
+    .sienna-value-select { min-width: 74px; padding: 0 22px 0 10px; }
+    .sienna-value-input  { width: 88px; padding: 0 8px; cursor: text; }
+    .sienna-value-input::-webkit-outer-spin-button,
+    .sienna-value-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+    .sienna-value-select:hover,
+    .sienna-value-input:hover { border-color: rgba(255,255,255,0.16); color: #eee; }
+    .sienna-value-select:focus,
+    .sienna-value-input:focus { border-color: rgba(255,255,255,0.28); color: #fff; background: #101010; }
+
+    .sienna-value-select option { background: #0b0b0b; color: #d0d0d0; }
+
+    .sienna-value-caret {
+      position: absolute; right: 7px; width: 9px; height: 9px;
+      pointer-events: none; fill: none; stroke: #555; stroke-width: 2;
+      stroke-linecap: round; stroke-linejoin: round;
+      transition: stroke 0.14s;
+    }
+    .sienna-value-wrap:hover .sienna-value-caret { stroke: #999; }
+
+    .sienna-value-select.s-flash,
+    .sienna-value-input.s-flash { border-color: #e0e0e0; color: #fff; background: #141414; }
+
+    /* ── "Saved" toast ── */
+    .sienna-saved-toast {
+      position: absolute; bottom: 58px; left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: #0f0f0f; border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px; padding: 8px 14px 8px 11px;
+      display: flex; align-items: center; gap: 8px;
+      color: #e0e0e0; font-size: 11.5px; font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.02);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 10; white-space: nowrap;
+    }
+    .sienna-saved-toast.s-show {
+      opacity: 1; transform: translateX(-50%) translateY(0);
+    }
+    .sienna-saved-toast svg {
+      width: 12px; height: 12px;
+      fill: none; stroke: #e0e0e0; stroke-width: 2.6;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+
     .sienna-footer {
       padding: 8px 13px; border-top: 1px solid rgba(255,255,255,0.04); background: #050505;
       display: flex; align-items: center; justify-content: center; gap: 6px; flex-shrink: 0;
@@ -234,6 +291,40 @@
     const n = getActiveHackCount();
     badge.textContent = n > 99 ? '99+' : String(n);
     badge.classList.toggle('s-show', n > 0);
+  }
+
+  // ── Raw storage read/write (localStorage + sessionStorage) ──
+  function readStoredValue(key) {
+    try {
+      const v = localStorage.getItem(key);
+      if (v !== null) return v;
+    } catch (_) {}
+    try { return sessionStorage.getItem(key); } catch (_) { return null; }
+  }
+
+  function writeStoredValue(key, value) {
+    const v = String(value);
+    let ok = false;
+    try { localStorage.setItem(key, v); ok = true; } catch (e) { console.warn('[Sienna] localStorage write failed:', e); }
+    try { sessionStorage.setItem(key, v); ok = true; } catch (_) {}
+    return ok;
+  }
+
+  // ── "Saved setting" toast ──
+  function showSavedToast(text) {
+    if (!menuContainer) return;
+    let toast = document.getElementById('sienna-saved-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'sienna-saved-toast';
+      toast.className = 'sienna-saved-toast';
+      toast.innerHTML = `<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span></span>`;
+      menuContainer.appendChild(toast);
+    }
+    toast.querySelector('span').textContent = text || 'Setting saved';
+    toast.classList.add('s-show');
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => toast.classList.remove('s-show'), 1600);
   }
 
   // Normalize a game's hack list into flat items with a stable _id
@@ -423,6 +514,58 @@
       btn.classList.toggle('active', on);
       updateBadge();
     });
+
+    // ── Storage value editors (dropdown / number) ──
+    // Delegated on the container so re-renders don't lose listeners.
+    const contentEl = document.getElementById('sienna-content');
+
+    function commitStorageValue(el) {
+      const key = el?.dataset?.storageKey;
+      if (!key) return;
+
+      let value = el.value;
+
+      if (el.type === 'number') {
+        const n = parseInt(value, 10);
+        if (!Number.isFinite(n)) return;
+        value = String(n);
+        if (el.value !== value) el.value = value;
+      }
+
+      const ok = writeStoredValue(key, value);
+
+      el.classList.add('s-flash');
+      setTimeout(() => el.classList.remove('s-flash'), 420);
+
+      if (ok) {
+        const label = el.dataset.label || key;
+        showSavedToast(`Saved ${label} = ${value}`);
+      } else {
+        showSavedToast('Could not save');
+      }
+    }
+
+    // 'change' fires for both select + number input on commit
+    contentEl.addEventListener('change', e => {
+      const el = e.target.closest('[data-storage-key]');
+      if (el) commitStorageValue(el);
+    });
+
+    // 'input' covers browsers that emit input before change for <select>,
+    // and also gives live feedback while typing numbers.
+    contentEl.addEventListener('input', e => {
+      const el = e.target.closest('[data-storage-key]');
+      if (!el) return;
+      // Only auto-save on 'input' for selects (numbers wait for change/blur)
+      if (el.tagName === 'SELECT') commitStorageValue(el);
+    });
+
+    // Also commit number inputs on blur so a typed value saves even if the
+    // user clicks away without pressing Enter.
+    contentEl.addEventListener('blur', e => {
+      const el = e.target.closest?.('[data-storage-key]');
+      if (el && el.type === 'number') commitStorageValue(el);
+    }, true);
   }
 
   // ───────────────────── DRAG ─────────────────────
@@ -430,7 +573,7 @@
     let drag = false, sx = 0, sy = 0, il = 0, it = 0;
 
     handle.addEventListener('mousedown', e => {
-      if (e.target.closest('a, button, input')) return;
+      if (e.target.closest('a, button, input, select')) return;
       drag = true;
       sx = e.clientX; sy = e.clientY;
       const r = el.getBoundingClientRect();
@@ -511,6 +654,49 @@
   }
 
   // ───────────────────── MENU RENDER ─────────────────────
+  // Builds the inline control for storage-editor hacks (dropdown / number input)
+  function renderValueControl(h, game) {
+    const c   = h.control || {};
+    const key = c.key;
+    if (!key) return '';
+
+    const currentRaw = readStoredValue(key);
+    const attrs =
+      `data-storage-key="${escapeHtml(key)}" ` +
+      `data-storage-game="${escapeHtml(game.id)}" ` +
+      `data-storage-hack="${escapeHtml(h._id)}" ` +
+      `data-label="${escapeHtml(c.label || key)}"`;
+
+    if (c.type === 'select') {
+      const min = Number.isFinite(c.min) ? c.min : 1;
+      const max = Number.isFinite(c.max) ? c.max : 50;
+      const cur = parseInt(currentRaw, 10);
+      const hasCur = Number.isFinite(cur);
+
+      let opts = '';
+      // Keep an out-of-range saved value selectable instead of silently losing it
+      if (hasCur && (cur < min || cur > max))
+        opts += `<option value="${cur}" selected>${cur}</option>`;
+
+      for (let i = min; i <= max; i++)
+        opts += `<option value="${i}"${hasCur && i === cur ? ' selected' : ''}>${i}</option>`;
+
+      return `<div class="sienna-value-wrap">
+          <select class="sienna-value-select" ${attrs} title="${escapeHtml(c.label || 'Value')}">${opts}</select>
+          <svg class="sienna-value-caret" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </div>`;
+    }
+
+    const min = Number.isFinite(c.min) ? c.min : 0;
+    const max = Number.isFinite(c.max) ? c.max : 999999;
+    const val = currentRaw == null ? '' : escapeHtml(currentRaw);
+
+    return `<input class="sienna-value-input" type="number" ${attrs}
+              min="${min}" max="${max}" step="1" value="${val}"
+              placeholder="${escapeHtml(c.placeholder || '—')}"
+              title="${escapeHtml(c.label || 'Value')}">`;
+  }
+
   function renderHackMenu() {
     if (!menuContainer) return;
     const content = document.getElementById('sienna-content');
@@ -528,17 +714,22 @@
         const on    = !!states[h._id];
         const title = h.name || game.name;
         const desc  = h.desc || game.description || 'Toggle to activate';
+
+        const control = h.control
+          ? renderValueControl(h, game)
+          : `<button class="sienna-run-btn${on ? ' active' : ''}"
+                     data-game-id="${escapeHtml(game.id)}"
+                     data-hack-toggle="${escapeHtml(h._id)}">
+               ${on ? 'Active' : 'Run'}
+             </button>`;
+
         html += `
           <div class="sienna-hack-item" data-st="${escapeHtml(title.toLowerCase())}" data-sd="${escapeHtml(desc.toLowerCase())}">
             <div class="sienna-hack-info">
               <div class="sienna-hack-title">${escapeHtml(title)}</div>
               <div class="sienna-hack-desc">${escapeHtml(desc)}</div>
             </div>
-            <button class="sienna-run-btn${on ? ' active' : ''}"
-                    data-game-id="${escapeHtml(game.id)}"
-                    data-hack-toggle="${escapeHtml(h._id)}">
-              ${on ? 'Active' : 'Run'}
-            </button>
+            ${control}
           </div>`;
       });
     });
@@ -637,6 +828,21 @@
     });
   }
 
+  if (!registry.find(p => p.id === 'cubefield')) {
+    registry.push({
+      id:          'cubefield',
+      name:        'Cubefield',
+      description: 'Edit your saved cubefield score.',
+      kind:        'hack',
+      hacks: [{
+        id:   'cubefield-score',
+        name: 'Cubefield',
+        desc: 'Change the saved cubefield score.',
+        control: { type: 'number', key: 'cubefieldscore', min: 0, max: 999999, label: 'Score' }
+      }]
+    });
+  }
+
   const MANAGER_SCRIPT_SRC = document.currentScript?.src || window.location.href;
 
   function loadManagedScript(file, kind) {
@@ -653,8 +859,7 @@
   }
 
   function loadScripts() {
-    PLUGIN_FILES.forEach(f => loadManagedScript(f, 'plugin'));
-    HACK_FILES.forEach(f   => loadManagedScript(f, 'hack'));
+    HACK_FILES.forEach(f => loadManagedScript(f, 'hack'));
   }
 
   if (document.body) loadScripts();

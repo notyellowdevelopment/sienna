@@ -39,42 +39,45 @@
 (function () {
   'use strict';
 
+  // Storage keys are declared once in sienna.js (window.SiennaStorageKeys).
+  var KEYS = window.SiennaStorageKeys;
+
   // ── Shared constants ──────────────────────────────────────────────────────
   var API_BASE        = 'https://sienna-db.vercel.app/api';
-  var TOKEN_KEY       = 'sienna_token';
-  var USERNAME_KEY    = 'sienna_username';
-  var LAST_SYNC_KEY   = 'sienna_last_sync_at';
+  var TOKEN_KEY       = KEYS.token;
+  var USERNAME_KEY    = KEYS.username;
+  var LAST_SYNC_KEY   = KEYS.lastSyncAt;
   // Hash of the last payload actually sent to the server — lets a manual
   // backup skip the network request entirely when nothing has changed.
-  var LAST_SYNC_HASH_KEY = 'sienna_last_sync_hash';
+  var LAST_SYNC_HASH_KEY = KEYS.lastSyncHash;
 
   // ── v4 key categorisation ─────────────────────────────────────────────────
   //  Maps each siennaData section to the localStorage keys that belong there.
   //  Any key NOT listed ends up in storage.localStorage ("other" bucket).
   var SIENNA_KEY_CATEGORIES = {
     settings: [
-      'sienna_reduce_motion',
-      'sienna_grid_columns',
-      'sienna_legacy_library',
-      'sienna_classic_logo',
-      'sienna_remember_tabs',
-      'sienna_cloak_method',
-      'sienna_auto_open',
-      'sienna_games_provider',
-      'sienna_theme_id',
-      'sienna_bubbles_enabled',
-      'sienna_tab_cloak',
-      'sienna_tab_cloak_custom_title',
-      'sienna_tab_cloak_custom_favicon',
-      'sienna_updates_seen_v0_9',
+      KEYS.reduceMotion,
+      KEYS.gridColumns,
+      KEYS.legacyLibrary,
+      KEYS.classicLogo,
+      KEYS.rememberTabs,
+      KEYS.cloakMethod,
+      KEYS.autoOpen,
+      KEYS.gamesProvider,
+      KEYS.themeId,
+      KEYS.bubblesEnabled,
+      KEYS.tabCloak,
+      KEYS.tabCloakCustomTitle,
+      KEYS.tabCloakCustomFavicon,
+      KEYS.updatesSeen,
     ],
     games: [
-      'sienna_custom_games',
-      'sienna_favs',
+      KEYS.customGames,
+      KEYS.favorites,
     ],
     appearance: [
-      'sienna_custom_themes',
-      'sienna_pfp',
+      KEYS.customThemes,
+      KEYS.profilePicture,
     ],
     account: [
       TOKEN_KEY,
@@ -83,8 +86,8 @@
       LAST_SYNC_HASH_KEY,
     ],
     tabs: [
-      'gameVisorTabs',
-      'gameVisorActiveTabId',
+      KEYS.gameVisorTabs,
+      KEYS.gameVisorActiveTabId,
     ],
   };
 
@@ -449,10 +452,10 @@
   function saveTabsToStorage(tabs, activeTabId) {
     if (!window.siennaSettings || !window.siennaSettings.shouldRememberTabs || !window.siennaSettings.shouldRememberTabs()) return;
     try {
-      localStorage.setItem('gameVisorTabs', JSON.stringify(tabs.map(function (t) {
+      localStorage.setItem(KEYS.gameVisorTabs, JSON.stringify(tabs.map(function (t) {
         return { id: t.id, url: t.url, name: t.name, loaded: false, gameData: t.gameData };
       })));
-      localStorage.setItem('gameVisorActiveTabId', activeTabId || '');
+      localStorage.setItem(KEYS.gameVisorActiveTabId, activeTabId || '');
     } catch (e) { /* ignore */ }
   }
 
@@ -461,8 +464,8 @@
       return { tabs: [], activeTabId: null };
     }
     try {
-      var saved    = localStorage.getItem('gameVisorTabs');
-      var activeId = localStorage.getItem('gameVisorActiveTabId');
+      var saved    = localStorage.getItem(KEYS.gameVisorTabs);
+      var activeId = localStorage.getItem(KEYS.gameVisorActiveTabId);
       var tabs     = saved ? JSON.parse(saved) || [] : [];
       tabs = tabs.map(function (t) { t.loaded = false; return t; });
       var activeTabId = activeId || (tabs.length ? tabs[tabs.length - 1].id : null);
@@ -481,7 +484,7 @@
       var settings = window.siennaSettings;
       if (!settings || !settings.themes) return;
       var customThemes = settings.themes.filter(function (t) { return t.id.indexOf('custom-') === 0; });
-      localStorage.setItem('sienna_custom_themes', JSON.stringify(customThemes));
+      localStorage.setItem(KEYS.customThemes, JSON.stringify(customThemes));
     } catch (e) { /* ignore */ }
   }
 
@@ -491,7 +494,7 @@
 
   function loadProfilePicture() {
     try {
-      return localStorage.getItem('sienna_pfp') || null;
+      return localStorage.getItem(KEYS.profilePicture) || null;
     } catch (e) {
       return null;
     }
@@ -499,7 +502,7 @@
 
   function saveProfilePicture(dataUrl) {
     try {
-      localStorage.setItem('sienna_pfp', dataUrl);
+      localStorage.setItem(KEYS.profilePicture, dataUrl);
       updateTopNavAvatar(dataUrl);
       if (window.siennaSettings && window.siennaSettings.renderPanel) {
         window.siennaSettings.renderPanel();
@@ -509,7 +512,7 @@
 
   function removeProfilePicture() {
     try {
-      localStorage.removeItem('sienna_pfp');
+      localStorage.removeItem(KEYS.profilePicture);
       updateTopNavAvatar(null);
       if (window.siennaAccount && window.siennaAccount.updateUI) {
         window.siennaAccount.updateUI();
@@ -1027,7 +1030,7 @@
     var wipeKeys = []
       .concat(SIENNA_KEY_CATEGORIES.settings)
       .concat(SIENNA_KEY_CATEGORIES.games)
-      .concat(['sienna_custom_themes'])   // appearance minus sienna_pfp
+      .concat([KEYS.customThemes])   // appearance minus sienna_pfp
       .concat(SIENNA_KEY_CATEGORIES.tabs);
 
     for (var i = 0; i < wipeKeys.length; i++) {
@@ -1378,15 +1381,10 @@
   // ═══════════════════════════════════════════════════════════
 
   // Auto-sync (periodic setInterval-based background sync) has been removed.
-  // Syncing is now manual-only, triggered by the user via saveToCloud(),
-  // which also skips the network request entirely when nothing has changed
-  // (see _computeSaveHash above). startAutoSync/stopAutoSync/autoSyncNow are
-  // kept as harmless no-ops/dead code so any existing call sites (e.g.
-  // siennadb.js init()) don't throw if they still call them.
-
-  function startAutoSync() {
-    // Intentionally does nothing — auto-sync has been disabled.
-  }
+  // Syncing is now manual-only, triggered by the user via saveToCloud(), which
+  // also skips the network request entirely when nothing has changed
+  // (see _computeSaveHash above). stopAutoSync remains so existing call sites
+  // (e.g. siennadb.js logout()) can still clear the sync-status ticker.
 
   function stopAutoSync() {
     var account = window.siennaAccount;
@@ -1394,12 +1392,6 @@
     // Still clear the cosmetic 1s UI ticker (started by markSynced) if running.
     if (account._syncStatusInterval) { clearInterval(account._syncStatusInterval); account._syncStatusInterval = null; }
     account._autoSyncEnabled = false;
-  }
-
-  async function autoSyncNow() {
-    // No longer called automatically. Left available for manual/debug use;
-    // just delegates to a normal (hash-gated) cloud save.
-    return saveToCloud();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1597,9 +1589,7 @@
     markAutoRestored:  markAutoRestored,
 
     // auto sync (from siennadb.js)
-    startAutoSync: startAutoSync,
     stopAutoSync:  stopAutoSync,
-    autoSyncNow:   autoSyncNow,
 
     // cloud save/restore (from siennadb.js)
     saveToCloud:       saveToCloud,
@@ -1633,30 +1623,4 @@
     window.siennaSettings.openProfilePictureUpload = openProfilePictureUpload;
   }
 
-  // ═══════════════════════════════════════════════════════════
-  //  BACK-PATCH siennaAccount (from siennadb.js)
-  // ═══════════════════════════════════════════════════════════
-
-  window._siennaSavePatches = {
-    _gatherFullSaveData:       gatherFullSaveData,
-    _dumpIndexedDB:            dumpIndexedDB,
-    _gatherIndexedDBFallback:  gatherIndexedDBFallback,
-    _restoreIndexedDB:         restoreIndexedDB,
-    _populateIndexedDB:        populateIndexedDB,
-    _restoreMarker:            restoreMarker,
-    _hasAutoRestored:          hasAutoRestored,
-    _markAutoRestored:         markAutoRestored,
-    _extractBackupPayload:     extractBackupPayload,
-    _handleAuthFailure:        handleAuthFailure,
-    _formatSyncStatus:         formatSyncStatus,
-    _updateSyncStatus:         updateSyncStatus,
-    _markSynced:               markSynced,
-    _sendCloudBackup:          sendCloudBackup,
-    _startAutoSync:            startAutoSync,
-    _stopAutoSync:             stopAutoSync,
-    _autoSyncNow:              autoSyncNow,
-    saveToCloud:               saveToCloud,
-    restoreFromCloud:          restoreFromCloud,
-    _autoRestore:              autoRestore,
-  };
 })();

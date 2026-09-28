@@ -1,6 +1,6 @@
 (function () {
-  const SIENNA_VERSION = "1.1.2";
-  const SIENNA_BUILD = "23";
+  const SIENNA_VERSION = "1.2.0";
+  const SIENNA_BUILD = "24";
   const CLASSIC_LOGO = String.raw`           /$$
           |__/
   /$$$$$$$ /$$  /$$$$$$  /$$$$$$$  /$$$$$$$   /$$$$$$
@@ -9,6 +9,69 @@
  \____  $$| $$| $$_____/| $$  | $$| $$  | $$ /$$__  $$
  /$$$$$$$/| $$|  $$$$$$$| $$  | $$| $$  | $$|  $$$$$$$ /$$
 |_______/ |__/ \_______/|__/  |__/|__/  |__/ \_______/|__/`;
+  // ── Single source of truth: storage keys + shared constants ──
+  // Declared once; referenced everywhere else by name (save.js, night.js,
+  // plugins.js). Rename or audit a key/constant here rather than across files.
+  window.SiennaStorageKeys = Object.freeze({
+    // Settings
+    reduceMotion: 'sienna_reduce_motion',
+    gridColumns: 'sienna_grid_columns',
+    legacyLibrary: 'sienna_legacy_library',
+    classicLogo: 'sienna_classic_logo',
+    rememberTabs: 'sienna_remember_tabs',
+    cloakMethod: 'sienna_cloak_method',
+    autoOpen: 'sienna_auto_open',
+    gamesProvider: 'sienna_games_provider',
+    themeId: 'sienna_theme_id',
+    bubblesEnabled: 'sienna_bubbles_enabled',
+    tabCloak: 'sienna_tab_cloak',
+    tabCloakCustomTitle: 'sienna_tab_cloak_custom_title',
+    tabCloakCustomFavicon: 'sienna_tab_cloak_custom_favicon',
+    updatesSeen: 'sienna_updates_seen_v1_01_02',
+    tutorialSeen: 'sienna_tutorial_seen',
+    // Games
+    customGames: 'sienna_custom_games',
+    favorites: 'sienna_favs',
+    // Appearance
+    customThemes: 'sienna_custom_themes',
+    profilePicture: 'sienna_pfp',
+    // Account
+    token: 'sienna_token',
+    username: 'sienna_username',
+    lastSyncAt: 'sienna_last_sync_at',
+    lastSyncHash: 'sienna_last_sync_hash',
+    // Game window tabs
+    gameVisorTabs: 'gameVisorTabs',
+    gameVisorActiveTabId: 'gameVisorActiveTabId',
+    // Plugins
+    pluginsEnabled: 'plugins.enabled',
+    hackStates: 'sienna.hackStates',
+  });
+
+  window.SiennaConstants = Object.freeze({
+    PROVIDERS: Object.freeze(['night', 'Lumin', 'gn-math', 'ugs', 'seraph', 'ckv']),
+    PROVIDER_OPTIONS: Object.freeze(['night', 'gn-math', 'ugs', 'seraph', 'ckv', 'Lumin']),
+    CLOAK_METHODS: Object.freeze(['about:blank', 'blob:null']),
+    GRID_COLUMN_OPTIONS: Object.freeze(['3', '4', '5', '6', '7']),
+    DEFAULT_PROVIDER: 'night',
+    DEFAULT_CLOAK_METHOD: 'about:blank',
+    ICONS_BASE: 'https://cdn.jsdelivr.net/gh/yellowdevelopment/night@latest/icons/',
+  });
+
+  const KEYS = window.SiennaStorageKeys;
+  const CONST = window.SiennaConstants;
+
+  // persistToggle() is shared by the boolean settings below: normalise the
+  // value, persist it, then re-apply. `reRender` refreshes the settings panel
+  // for options that visibly affect it (grid / legacy view).
+  function persistToggle(stateProp, key, value, reRender) {
+    const bool = Boolean(value);
+    window.siennaSettings.state[stateProp] = bool;
+    storage.set(key, String(bool));
+    window.siennaSettings.apply();
+    if (reRender) window.siennaSettings.renderPanel();
+  }
+
   const storage = {
     get(key, fallback) {
       try {
@@ -17,6 +80,10 @@
       } catch (error) {
         return fallback;
       }
+    },
+    getBoolean(key, fallback) {
+      const value = this.get(key, null);
+      return value === null ? fallback : value === 'true';
     },
     set(key, value) {
       try {
@@ -37,27 +104,27 @@
   window.siennaSettings = {
     tabCloakPresets:[
       { previewTitle:"Default", realTitle:"sienna.", favicon:"favicon.ico" },
-      { previewTitle:"Google", realTitle:"Google", favicon:"icons/favicons/google.ico" },
-      { previewTitle:"Schoology", realTitle:"Home | Schoology", favicon:"icons/favicons/schoology.ico" },
-      { previewTitle:"Canvas", realTitle:"Dashboard", favicon:"icons/favicons/canvas.ico" },
-      { previewTitle:"Khan Academy", realTitle:"Dashboard | Khan Academy", favicon:"icons/favicons/khan.ico" },
-      { previewTitle:"CodeHS", realTitle:"Sections | CodeHS", favicon:"icons/favicons/codehs.ico" },
-      { previewTitle:"CodeHS Sandbox", realTitle:"Sandbox | CodeHS", favicon:"icons/favicons/codehs.ico" },
-      { previewTitle:"Classlink", realTitle:"My Apps", favicon:"icons/favicons/classlink.ico" },
-      { previewTitle:"Gmail", realTitle:"Inbox", favicon:"icons/favicons/gmail.ico" },
-      { previewTitle:"Google Classroom", realTitle:"Home - Classroom", favicon:"icons/favicons/googleclassroom.ico" },
-      { previewTitle:"Google Drive", realTitle:"My Drive", favicon:"icons/favicons/googledrive.ico" },
-      { previewTitle:"Google Docs", realTitle:"Google Docs", favicon:"icons/favicons/googledocs.ico" },
-      { previewTitle:"Google Forms", realTitle:"Google Forms", favicon:"icons/favicons/googleforms.ico" },
-      { previewTitle:"Google Forms Lock Down Mode", realTitle:"Start your quiz", favicon:"icons/favicons/googleforms.ico" },
-      { previewTitle:"Google Slides", realTitle:"Google Slides", favicon:"icons/favicons/googleslides.ico" },
-      { previewTitle:"Google Sites", realTitle:"Google Sites", favicon:"icons/favicons/googlesites.ico" },
-      { previewTitle:"Home Access Center", realTitle:"Home View Summary", favicon:"icons/favicons/hac.ico" },
-      { previewTitle:"IXL", realTitle:"IXL | Math, Language Arts, Social Studies, and Spanish", favicon:"icons/favicons/ixl.ico" },
-      { previewTitle:"i-Ready Math", realTitle:"Math To Do, i-Ready", favicon:"icons/favicons/iready.ico" },
-      { previewTitle:"i-Ready Reading", realTitle:"Reading To Do, i-Ready", favicon:"icons/favicons/iready.ico" },
-      { previewTitle:"Eduphoria", realTitle:"Eduphoria! Login", favicon:"icons/favicons/eduphoria.ico" },
-      { previewTitle:"McGraw Hill", realTitle:"McGraw Hill Professional | Textbooks | Interactive Learning Solutions", favicon:"icons/favicons/mcgrawhill.ico" },
+      { previewTitle:"Google", realTitle:"Google", favicon: CONST.ICONS_BASE + "favicons/google.ico" },
+      { previewTitle:"Schoology", realTitle:"Home | Schoology", favicon: CONST.ICONS_BASE + "favicons/schoology.ico" },
+      { previewTitle:"Canvas", realTitle:"Dashboard", favicon: CONST.ICONS_BASE + "favicons/canvas.ico" },
+      { previewTitle:"Khan Academy", realTitle:"Dashboard | Khan Academy", favicon: CONST.ICONS_BASE + "favicons/khan.ico" },
+      { previewTitle:"CodeHS", realTitle:"Sections | CodeHS", favicon: CONST.ICONS_BASE + "favicons/codehs.ico" },
+      { previewTitle:"CodeHS Sandbox", realTitle:"Sandbox | CodeHS", favicon: CONST.ICONS_BASE + "favicons/codehs.ico" },
+      { previewTitle:"Classlink", realTitle:"My Apps", favicon: CONST.ICONS_BASE + "favicons/classlink.ico" },
+      { previewTitle:"Gmail", realTitle:"Inbox", favicon: CONST.ICONS_BASE + "favicons/gmail.ico" },
+      { previewTitle:"Google Classroom", realTitle:"Home - Classroom", favicon: CONST.ICONS_BASE + "favicons/googleclassroom.ico" },
+      { previewTitle:"Google Drive", realTitle:"My Drive", favicon: CONST.ICONS_BASE + "favicons/googledrive.ico" },
+      { previewTitle:"Google Docs", realTitle:"Google Docs", favicon: CONST.ICONS_BASE + "favicons/googledocs.ico" },
+      { previewTitle:"Google Forms", realTitle:"Google Forms", favicon: CONST.ICONS_BASE + "favicons/googleforms.ico" },
+      { previewTitle:"Google Forms Lock Down Mode", realTitle:"Start your quiz", favicon: CONST.ICONS_BASE + "favicons/googleforms.ico" },
+      { previewTitle:"Google Slides", realTitle:"Google Slides", favicon: CONST.ICONS_BASE + "favicons/googleslides.ico" },
+      { previewTitle:"Google Sites", realTitle:"Google Sites", favicon: CONST.ICONS_BASE + "favicons/googlesites.ico" },
+      { previewTitle:"Home Access Center", realTitle:"Home View Summary", favicon: CONST.ICONS_BASE + "favicons/hac.ico" },
+      { previewTitle:"IXL", realTitle:"IXL | Math, Language Arts, Social Studies, and Spanish", favicon: CONST.ICONS_BASE + "favicons/ixl.ico" },
+      { previewTitle:"i-Ready Math", realTitle:"Math To Do, i-Ready", favicon: CONST.ICONS_BASE + "favicons/iready.ico" },
+      { previewTitle:"i-Ready Reading", realTitle:"Reading To Do, i-Ready", favicon: CONST.ICONS_BASE + "favicons/iready.ico" },
+      { previewTitle:"Eduphoria", realTitle:"Eduphoria! Login", favicon: CONST.ICONS_BASE + "favicons/eduphoria.ico" },
+      { previewTitle:"McGraw Hill", realTitle:"McGraw Hill Professional | Textbooks | Interactive Learning Solutions", favicon: CONST.ICONS_BASE + "favicons/mcgrawhill.ico" },
     ],
 
     state: {
@@ -66,9 +133,9 @@
       legacyLibrary: false,
       classicLogo: false,
       rememberTabs: true,
-      cloakMethod: "about:blank",
+      cloakMethod: CONST.DEFAULT_CLOAK_METHOD,
       autoOpen: "Disabled",
-      gamesProvider: "night.",
+      gamesProvider: CONST.DEFAULT_PROVIDER,
       activeThemeId: "none",
       bubblesEnabled: true,
       tabCloakId: "Default",
@@ -80,15 +147,19 @@
     // Add or edit update cards here. Change storageKey when you want everyone to
     // see the panel again after a new release.
     updates: {
-      storageKey: "sienna_updates_seen_v1_01_02",
+      storageKey: KEYS.updatesSeen1,
       showOnFirstVisit: true,
       previousLogsUrl: "updatelogs.json",
       title: "What's new",
-      version: "v1.1.2",
+      version: "v1.2",
       sections: [
         {
-          title: "Integrated gn-math interface, compressed background sizes, added history to update logs + minor patches",
-          description: "Thank you for using sienna.",
+          title: "Added 3 new providers",
+          description: "Added ugs (Ultimate Game Stash), Seraph, and ChickenKingsVault (ckv) integrated into the original layout",
+        },
+        {
+          title: "Note:",
+          description: "Due to vercel's edge transfers limit, I'm now delivering night. through jsdelivr which could cause slower loading times",
         },
       ],
     },
@@ -110,6 +181,7 @@
       { id: 'backrooms', label: 'Backrooms', url: 'backgrounds/backrooms.webp' },
       { id: 'interstellar', label: 'Interstellar', url: 'backgrounds/interstellar.webp' },
       { id: 'projecthailmary', label: 'Project Hail Mary', url: 'backgrounds/projecthailmary.webp' },
+      { id: 'tqq', label: 'The Quintessential Quintuplets', url: 'backgrounds/tqq.webp' },
       { id: 'terraria', label: 'Terraria', url: 'backgrounds/terraria.png' },
       { id: 'hollowknight', label: 'Hollow Knight', url: 'backgrounds/hollowknight.webp' },
       { id: 'hollowknightsilksong', label: 'Hollow Knight: Silksong', url: 'backgrounds/hollowknightsilksong.webp' },
@@ -130,12 +202,12 @@
         label: "Cards per row",
         desc: "Default is 5. Choose a calmer or denser game grid.",
         type: "choice",
-        options: ["3", "4", "5", "6", "7"],
+        options: CONST.GRID_COLUMN_OPTIONS,
         get: () => window.siennaSettings.state.gridColumns,
         set: (value) => {
-          const next = ["3", "4", "5", "6", "7"].includes(value) ? value : "5";
+          const next = CONST.GRID_COLUMN_OPTIONS.includes(value) ? value : "5";
           window.siennaSettings.state.gridColumns = next;
-          storage.set("sienna_grid_columns", next);
+          storage.set(KEYS.gridColumns, next);
           window.siennaSettings.apply();
           window.siennaSettings.renderPanel();
         },
@@ -148,10 +220,7 @@
         type: "toggle",
         get: () => window.siennaSettings.state.legacyLibrary,
         set: (value) => {
-          window.siennaSettings.state.legacyLibrary = Boolean(value);
-          storage.set("sienna_legacy_library", String(Boolean(value)));
-          window.siennaSettings.apply();
-          window.siennaSettings.renderPanel();
+          persistToggle("legacyLibrary", KEYS.legacyLibrary, value, true);
         },
       },
       {
@@ -162,9 +231,7 @@
         type: "toggle",
         get: () => window.siennaSettings.state.classicLogo,
         set: (value) => {
-          window.siennaSettings.state.classicLogo = Boolean(value);
-          storage.set("sienna_classic_logo", String(Boolean(value)));
-          window.siennaSettings.apply();
+          persistToggle("classicLogo", KEYS.classicLogo, value);
         },
       },
       {
@@ -175,9 +242,7 @@
         type: "toggle",
         get: () => window.siennaSettings.state.reduceMotion,
         set: (value) => {
-          window.siennaSettings.state.reduceMotion = Boolean(value);
-          storage.set("sienna_reduce_motion", String(Boolean(value)));
-          window.siennaSettings.apply();
+          persistToggle("reduceMotion", KEYS.reduceMotion, value);
         },
       },
       {
@@ -188,9 +253,7 @@
         type: "toggle",
         get: () => window.siennaSettings.state.bubblesEnabled,
         set: (value) => {
-          window.siennaSettings.state.bubblesEnabled = Boolean(value);
-          storage.set("sienna_bubbles_enabled", String(Boolean(value)));
-          window.siennaSettings.apply();
+          persistToggle("bubblesEnabled", KEYS.bubblesEnabled, value);
         },
       },
       {
@@ -200,13 +263,10 @@
         desc: "Choose different providers for games",
 
         type: "choice",
-        options: ["night.", "gn-math", "Lumin"],
+        options: CONST.PROVIDER_OPTIONS,
         get: () => window.siennaSettings.state.gamesProvider,
         set: (value) => {
-          const valid = ["night.", "Lumin", "gn-math"];
-          window.siennaSettings.state.gamesProvider = valid.includes(value) ? value : "night.";
-          storage.set("sienna_games_provider", window.siennaSettings.state.gamesProvider);
-          window.siennaSettings.applyGamesProvider(window.siennaSettings.state.gamesProvider);
+          window.siennaSettings.setGamesProvider(value);
           window.siennaSettings.renderPanel();
         },
 
@@ -217,11 +277,11 @@
         label: "Cloak method",
         desc: "Choose how games open from the external-open button.",
         type: "choice",
-        options:["about:blank", "blob:null"],
+        options: CONST.CLOAK_METHODS,
         get: () => window.siennaSettings.state.cloakMethod,
         set: (value) => {
-          window.siennaSettings.state.cloakMethod = value === "blob:null" ? "blob:null" : "about:blank";
-          storage.set("sienna_cloak_method", window.siennaSettings.state.cloakMethod);
+          window.siennaSettings.state.cloakMethod = value === "blob:null" ? "blob:null" : CONST.DEFAULT_CLOAK_METHOD;
+          storage.set(KEYS.cloakMethod, window.siennaSettings.state.cloakMethod);
           window.siennaSettings.renderPanel();
         },
       },
@@ -231,11 +291,11 @@
         label: "Auto open",
         desc: "Automatically open the site in a cloaked tab on load.",
         type: "select",
-        options:["Disabled", "about:blank", "blob:null"],
+        options: ["Disabled", ...CONST.CLOAK_METHODS],
         get: () => window.siennaSettings.state.autoOpen,
         set: (value) => {
-          window.siennaSettings.state.autoOpen =["about:blank", "blob:null"].includes(value) ? value : "Disabled";
-          storage.set("sienna_auto_open", window.siennaSettings.state.autoOpen);
+          window.siennaSettings.state.autoOpen = CONST.CLOAK_METHODS.includes(value) ? value : "Disabled";
+          storage.set(KEYS.autoOpen, window.siennaSettings.state.autoOpen);
         },
       },
       {
@@ -262,13 +322,11 @@
         type: "toggle",
         get: () => window.siennaSettings.state.rememberTabs,
         set: (value) => {
-          window.siennaSettings.state.rememberTabs = Boolean(value);
-          storage.set("sienna_remember_tabs", String(Boolean(value)));
+          persistToggle("rememberTabs", KEYS.rememberTabs, value);
           if (!value) {
-            storage.remove("gameVisorTabs");
-            storage.remove("gameVisorActiveTabId");
+            storage.remove(KEYS.gameVisorTabs);
+            storage.remove(KEYS.gameVisorActiveTabId);
           }
-          window.siennaSettings.apply();
         },
       },
       {
@@ -279,8 +337,8 @@
         type: "action",
         buttonLabel: "Clear",
         onClick: () => {
-          storage.remove("gameVisorTabs");
-          storage.remove("gameVisorActiveTabId");
+          storage.remove(KEYS.gameVisorTabs);
+          storage.remove(KEYS.gameVisorActiveTabId);
           if (window.gameVisor) {
             window.gameVisor.tabs =[];
             window.gameVisor.activeTabId = null;
@@ -365,7 +423,7 @@
         desc: `
           <div class="ubghub-feature">
             <div class="ubghub-feature-main">
-              <img src="icons/ubghub.png" alt="UBGHub" class="ubghub-feature-logo">
+              <img src="${CONST.ICONS_BASE}ubghub.png" alt="UBGHub" class="ubghub-feature-logo">
               <div class="ubghub-feature-copy">
                 <div class="ubghub-feature-title">UBGHub</div>
                 <div class="ubghub-feature-desc">Sienna is listed in UBGHub's game site directory.</div>
@@ -382,7 +440,7 @@
 
     loadCustomThemes() {
       try {
-        const saved = localStorage.getItem("sienna_custom_themes");
+        const saved = localStorage.getItem(KEYS.customThemes);
         if (saved) {
           const customThemes = JSON.parse(saved);
           if (Array.isArray(customThemes)) {
@@ -400,22 +458,23 @@
     // saveCustomThemes() patched by save.js
 
     init() {
-      this.state.reduceMotion = storage.get("sienna_reduce_motion", "false") === "true";
-      this.state.gridColumns = ["3", "4", "5", "6", "7"].includes(storage.get("sienna_grid_columns", "5")) ? storage.get("sienna_grid_columns", "5") : "5";
-      this.state.legacyLibrary = storage.get("sienna_legacy_library", "false") === "true";
-      this.state.classicLogo = storage.get("sienna_classic_logo", "false") === "true";
-      this.state.rememberTabs = storage.get("sienna_remember_tabs", "true") !== "false";
-      this.state.cloakMethod = storage.get("sienna_cloak_method", "about:blank") === "blob:null" ? "blob:null" : "about:blank";
-      this.state.autoOpen =["about:blank", "blob:null"].includes(storage.get("sienna_auto_open", "Disabled")) ? storage.get("sienna_auto_open", "Disabled") : "Disabled";
-      const savedProvider = storage.get("sienna_games_provider", "night.");
-      const validProviders =["night.", "Lumin", "gn-math"];
-      this.state.gamesProvider = validProviders.includes(savedProvider) ? savedProvider : "night.";
+      this.state.reduceMotion = storage.getBoolean(KEYS.reduceMotion, false);
+      const gridColumns = storage.get(KEYS.gridColumns, "5");
+      this.state.gridColumns = CONST.GRID_COLUMN_OPTIONS.includes(gridColumns) ? gridColumns : "5";
+      this.state.legacyLibrary = storage.getBoolean(KEYS.legacyLibrary, false);
+      this.state.classicLogo = storage.getBoolean(KEYS.classicLogo, false);
+      this.state.rememberTabs = storage.get(KEYS.rememberTabs, "true") !== "false";
+      this.state.cloakMethod = storage.get(KEYS.cloakMethod, CONST.DEFAULT_CLOAK_METHOD) === "blob:null" ? "blob:null" : CONST.DEFAULT_CLOAK_METHOD;
+      const autoOpen = storage.get(KEYS.autoOpen, "Disabled");
+      this.state.autoOpen = CONST.CLOAK_METHODS.includes(autoOpen) ? autoOpen : "Disabled";
+      const savedProvider = storage.get(KEYS.gamesProvider, CONST.DEFAULT_PROVIDER);
+      this.state.gamesProvider = CONST.PROVIDERS.includes(savedProvider) ? savedProvider : CONST.DEFAULT_PROVIDER;
 
-      this.state.activeThemeId = storage.get("sienna_theme_id", "none");
-      this.state.bubblesEnabled = storage.get("sienna_bubbles_enabled", "true") !== "false";
-      this.state.tabCloakId = storage.get("sienna_tab_cloak", "Default");
-      this.state.tabCloakCustomTitle = storage.get("sienna_tab_cloak_custom_title", "");
-      this.state.tabCloakCustomFavicon = storage.get("sienna_tab_cloak_custom_favicon", "");
+      this.state.activeThemeId = storage.get(KEYS.themeId, "none");
+      this.state.bubblesEnabled = storage.get(KEYS.bubblesEnabled, "true") !== "false";
+      this.state.tabCloakId = storage.get(KEYS.tabCloak, "Default");
+      this.state.tabCloakCustomTitle = storage.get(KEYS.tabCloakCustomTitle, "");
+      this.state.tabCloakCustomFavicon = storage.get(KEYS.tabCloakCustomFavicon, "");
 
       this.loadCustomThemes();
       this.createToolbar();
@@ -466,7 +525,7 @@
       if (!theme) {
         // Reset to black background (no theme)
         this.state.activeThemeId = "none";
-        storage.set("sienna_theme_id", "none");
+        storage.set(KEYS.themeId, "none");
         document.documentElement.style.setProperty("--theme-image", "none");
         document.documentElement.classList.remove("has-theme");
         document.body.classList.remove("has-theme");
@@ -474,7 +533,7 @@
         return;
       }
       this.state.activeThemeId = theme.id;
-      storage.set("sienna_theme_id", theme.id);
+      storage.set(KEYS.themeId, theme.id);
 
       if (theme.variant === "gradient") {
         document.documentElement.style.setProperty("--theme-image", "none");
@@ -520,20 +579,22 @@
       document.body.classList.toggle("has-theme", Boolean(imageUrl));
     },
 
-    applyGamesProvider(provider) {
-      const host = document.getElementById("page-browse") || document.body;
+    setGamesProvider(provider) {
+      this.state.gamesProvider = CONST.PROVIDERS.includes(provider) ? provider : CONST.DEFAULT_PROVIDER;
+      storage.set(KEYS.gamesProvider, this.state.gamesProvider);
+      this.applyGamesProvider(this.state.gamesProvider);
+    },
 
-      // Providers live in js/providers.js. gn-math renders into night.'s own
-      // grid; Lumin keeps its own SDK container.
+    applyGamesProvider(provider) {
+      // Providers live in js/providers.js; they all render into night.'s grid.
       if (window.siennaProviders?.apply) {
-        window.siennaProviders.apply(provider, { host });
+        window.siennaProviders.apply(provider);
         return;
       }
 
       // Fallback when js/providers.js is unavailable: keep night.'s own grid and
       // drop any provider containers left behind by an older build.
       document.getElementById("lumin-section")?.remove();
-      document.getElementById("gnmath-section")?.remove();
       const browseGrid = document.getElementById("browseGrid");
       if (browseGrid) browseGrid.style.display = "";
       document.querySelectorAll(".grid-section-label").forEach((label) => {
@@ -555,9 +616,9 @@
         this.state.tabCloakId = "Custom";
         this.state.tabCloakCustomTitle = customTitle;
         this.state.tabCloakCustomFavicon = customFavicon;
-        storage.set("sienna_tab_cloak", "Custom");
-        storage.set("sienna_tab_cloak_custom_title", customTitle);
-        storage.set("sienna_tab_cloak_custom_favicon", customFavicon);
+        storage.set(KEYS.tabCloak, "Custom");
+        storage.set(KEYS.tabCloakCustomTitle, customTitle);
+        storage.set(KEYS.tabCloakCustomFavicon, customFavicon);
         return;
       }
 
@@ -573,7 +634,7 @@
         }
         link.href = "favicon.ico";
         this.state.tabCloakId = "Default";
-        storage.set("sienna_tab_cloak", "Default");
+        storage.set(KEYS.tabCloak, "Default");
         return;
       }
       document.title = preset.realTitle;
@@ -585,7 +646,7 @@
       }
       link.href = preset.favicon;
       this.state.tabCloakId = cloakId;
-      storage.set("sienna_tab_cloak", cloakId);
+      storage.set(KEYS.tabCloak, cloakId);
     },
 
     maybeAutoOpen() {
@@ -1265,7 +1326,7 @@
           const value = tabCloakSelect.value;
           if (value === "Custom") {
             this.state.tabCloakId = "Custom";
-            storage.set("sienna_tab_cloak", "Custom");
+            storage.set(KEYS.tabCloak, "Custom");
             this.renderPanel();
           } else {
             this.applyTabCloak(value);
@@ -1336,17 +1397,6 @@
           }
         });
       });
-    },
-
-    renderSection(section, items) {
-      return `
-        <section class="settings-section">
-          <div class="settings-section-title">${this.escapeHtml(section)}</div>
-          <div class="settings-section-body">
-            ${items.map((item) => this.renderItem(item)).join("")}
-          </div>
-        </section>
-      `;
     },
 
     renderItem(item) {
@@ -1893,7 +1943,7 @@
         r: 6 + Math.random() * 24,
         speed: 0.12 + Math.random() * 0.28,
         drift: (Math.random() - 0.5) * 0.2,
-        opacity: 0.08 + Math.random() * 0.10,
+        opacity: 0.16 + Math.random() * 0.20,
         popped: false,
         popTimer: 0,
         hue: 190 + Math.random() * 40
@@ -1916,7 +1966,7 @@
             b.x = Math.random() * w;
             b.y = h + b.r;
             b.r = 6 + Math.random() * 24;
-            b.opacity = 0.08 + Math.random() * 0.10;
+            b.opacity = 0.16 + Math.random() * 0.20;
             b.hue = 190 + Math.random() * 40;
           }
           continue;
@@ -1985,8 +2035,6 @@
 
   // ── Tutorial Overlay ──
   (function initTutorial() {
-    const TUTORIAL_KEY = "sienna_tutorial_seen";
-
     const slides = [
       {
         logo: true,
@@ -2006,7 +2054,7 @@
       {
         image: "tutorial/providers.png",
         title: "Not the games you want?",
-        desc: 'You can use other providers such as <strong>gn-math</strong> and <strong>Lumin</strong> if we don\'t have the games you want.',
+        desc: 'You can use other providers such as <strong>gn-math</strong>, <strong>seraph</strong>, <strong>ckv</strong> and <strong>Lumin</strong> if we don\'t have the games you want.',
       },
       {
         image: "tutorial/account.png",
@@ -2035,17 +2083,11 @@
     let imageEl = null;
 
     function hasSeenTutorial() {
-      try {
-        return localStorage.getItem(TUTORIAL_KEY) === "true";
-      } catch (e) {
-        return false;
-      }
+      return storage.get(KEYS.tutorialSeen, "false") === "true";
     }
 
     function markSeen() {
-      try {
-        localStorage.setItem(TUTORIAL_KEY, "true");
-      } catch (e) {}
+      storage.set(KEYS.tutorialSeen, "true");
     }
 
     function renderDots() {

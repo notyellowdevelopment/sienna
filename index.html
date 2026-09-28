@@ -96,6 +96,7 @@ made by yellowdevelopment
 
         <!-- Slideshow at the very top of this section -->
         <section class="featured" id="featured" aria-label="Featured">
+          <div class="featured-bg" id="featuredBg" aria-hidden="true"></div>
           <button class="featured-arrow left" id="featuredPrev" type="button" aria-label="Previous featured">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
           </button>
@@ -110,6 +111,23 @@ made by yellowdevelopment
         <div class="browse-top">
           <div class="browse-heading">
             <span class="browse-heading-static">Viewing</span>
+            <div class="browse-dropdown" id="browseProviderDropdown">
+              <button class="browse-dropdown-btn" id="browseProviderBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                <span class="browse-dropdown-label" id="browseProviderLabel">night</span>
+                <svg class="browse-dropdown-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6"></path>
+                </svg>
+              </button>
+              <div class="browse-dropdown-menu" role="listbox" id="browseProviderMenu">
+                <div class="browse-dropdown-item active" role="option" data-value="night" aria-selected="true">Night</div>
+                <div class="browse-dropdown-item" role="option" data-value="gn-math" aria-selected="false">gn-math</div>
+                <div class="browse-dropdown-item" role="option" data-value="ugs" aria-selected="false">ugs</div>
+                <div class="browse-dropdown-item" role="option" data-value="seraph" aria-selected="false">Seraph</div>
+                <div class="browse-dropdown-item" role="option" data-value="ckv" aria-selected="false">ChickenKingsVault (ckv)</div>
+                <div class="browse-dropdown-item" role="option" data-value="Lumin" aria-selected="false">Lumin</div>
+              </div>
+            </div>
+            <span class="browse-heading-divider" id="browseHeadingDivider" aria-hidden="true">|</span>
             <div class="browse-dropdown" id="browseDropdown">
               <button class="browse-dropdown-btn" id="browseDropdownBtn" type="button" aria-haspopup="listbox" aria-expanded="false">
                 <span class="browse-dropdown-label" id="browseDropdownLabel">All Games</span>
@@ -150,8 +168,6 @@ made by yellowdevelopment
 
   </main>
 
-  <!-- ── Info button & popup (removed, credits moved to settings) ── -->
-
 
   <!-- ── Game Visor ── -->
   <div id="gameVisorOverlay" class="game-visor-overlay" aria-hidden="true"></div>
@@ -166,11 +182,11 @@ made by yellowdevelopment
         <div class="game-visor-title" id="gameVisorTitle">Game</div>
       </div>
       <div class="game-visor-actions">
-        <button id="gameVisorRefresh" class="game-visor-action-btn" type="button" aria-label="Refresh game">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path></svg>
-        </button>
         <button id="gameVisorDownload" class="game-visor-action-btn" type="button" aria-label="Download game HTML" title="Download game HTML" style="display:none;">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg>
+        </button>
+        <button id="gameVisorRefresh" class="game-visor-action-btn" type="button" aria-label="Refresh game">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path></svg>
         </button>
         <button id="gameVisorOpenBlank" class="game-visor-action-btn" type="button" aria-label="Open game in new tab">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7M10 14L21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg>
@@ -329,8 +345,6 @@ made by yellowdevelopment
   <!-- ═══════════════════════════════════════════════════════
        SIENNA CORE SCRIPTS
   ════════════════════════════════════════════════════════ -->
-  <script src="js/mages.js" defer></script>
-  <script src="js/apps.js" defer></script>
   <script src="js/providers.js" defer></script>
   <script src="js/sienna.js" defer></script>
   <script src="js/save.js" defer></script>

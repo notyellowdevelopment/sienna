@@ -20,28 +20,33 @@ made by yellowdevelopment
 
 /**
  * Browse / opening flow, games & apps grid, dropdown, info popup.
- * Data: mages.js (window.MAGES_GAMES), apps.js (window.APPS_ITEMS).
+ * Game data is supplied by the active provider (js/providers.js); the default
+ * "night" provider fetches its catalog from the night CDN.
  */
 (function () {
-  const NAME_OVERRIDES = {
-  };
+  const KEYS = window.SiennaStorageKeys;
 
-  const CATEGORY_CONFIG = {
-    'All Games': { list: () => window.MAGES_GAMES, basePath: 'mages/', emptyMsg: 'No games found.', failMsg: 'Game list failed to load (mages.js).' },
-    'All Apps': { list: () => window.APPS_ITEMS, basePath: 'apps/', emptyMsg: 'No apps yet.', failMsg: 'App list failed to load (apps.js).' },
-  };
+  // The active provider's catalogs (set via window.nightLibrary.setLibrary).
+  // Providers with a single catalog expose one entry; multi-catalog providers
+  // (night and seraph: Games + Apps) expose several, each with its own label.
+  let libraryCategories = [];
+
+  function categoryGames(category) {
+    const found = libraryCategories.find((c) => c.label === category);
+    return found ? found.games : null;
+  }
 
   const STAGGER_CAP_MS = 480;
   const STAGGER_STEP_MS = 10;
   const GRID_FADE_MS = 200;
   const SCROLL_DURATION_MS = 600;
   const SCROLL_MIN_MS = 280;
-  const FALLBACK_ICON = 'icons/assets/imagenotfound.png';
+  const FALLBACK_ICON = 'https://cdn.jsdelivr.net/gh/yellowdevelopment/night@latest/icons/assets/imagenotfound.png';
 
   const util = {
     escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({
-        '&': '&', '<': '<', '>': '>', '"': '"', "'": '&#39;',
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
       }[c]));
     },
     slugFromUrl(item) {
@@ -50,10 +55,7 @@ made by yellowdevelopment
     },
     formatDisplayName(item) {
       const slug = this.slugFromUrl(item);
-      if (slug && NAME_OVERRIDES[slug]) return NAME_OVERRIDES[slug];
 
-      // Prefer authoritative name from data (mages.js / apps.js). Keep exact
-      // provided value for name to preserve dashes, uppercase, and punctuation.
       const source = String(item?.name || slug || '');
       if (item?.name && String(item.name).trim() !== '') return source;
 
@@ -125,13 +127,20 @@ made by yellowdevelopment
         return path;
       }
     },
-    itemHref(item, basePath = '') {
+    itemHref(item) {
       const raw = String(item?.url || '');
       if (!raw) return '';
-      if (/^(?:[a-zA-Z][a-zA-Z\d+\-.]*:|\/\/)/.test(raw)) {
-        return this.resolveUrl(raw);
-      }
-      return this.resolveUrl(`${basePath}${raw}`);
+      return this.resolveUrl(raw);
+    },
+    absolutizeBaseHref(html) {
+      return String(html || '').replace(
+        /<base\s+href=["']([^"']*)["']\s*\/?>/gi,
+        (match, href) => {
+          if (/^(https?:)?\/\//i.test(href)) return match;
+          const resolved = new URL(href, window.location.origin).href;
+          return `<base href="${resolved}">`;
+        }
+      );
     },
     isDisplayable() {
       return true;
@@ -139,7 +148,7 @@ made by yellowdevelopment
   };
 
   const customGames = {
-    storageKey: 'sienna_custom_games',
+    storageKey: KEYS.customGames,
     items: [],
 
     load() {
@@ -173,15 +182,7 @@ made by yellowdevelopment
         if (g.html && !url) {
           try {
             let html = g.html;
-            // Fix: ensure <base href> works correctly with blob URLs
-            html = html.replace(
-              /<base\s+href=["']([^"']*)["']\s*\/?>/gi,
-              (match, href) => {
-                if (/^(https?:)?\/\//i.test(href)) return match;
-                const resolved = new URL(href, window.location.origin).href;
-                return `<base href="${resolved}">`;
-              }
-            );
+            html = util.absolutizeBaseHref(html);
             const blob = new Blob([html], { type: 'text/html' });
             url = URL.createObjectURL(blob);
           } catch (e) {
@@ -587,9 +588,19 @@ made by yellowdevelopment
       const rect = page.getBoundingClientRect();
       if (rect.top <= window.innerHeight * 0.6) this.revealBrowse();
     },
+    updateBrowseTint() {
+      const landing = document.getElementById('page-landing');
+      const browse = document.getElementById('page-browse');
+      if (!landing || !browse) return;
+      const vh = window.innerHeight;
+      const visibleHeight = (rect) => Math.max(0, Math.min(rect.bottom, vh) - Math.max(rect.top, 0));
+      const landingVisible = visibleHeight(landing.getBoundingClientRect());
+      const browseVisible = visibleHeight(browse.getBoundingClientRect());
+      // Only tint while the browse page is actually the dominant page; the CSS
+      // transition provides the smooth fade in/out.
+      browse.classList.toggle('tinted', browseVisible > landingVisible);
+    },
     bind() {
-      // Scroll button snaps down to the browse section
-      document.getElementById('scrollBtn')?.addEventListener('click', () => scroll.toBrowseSection());
       // Nav link click handlers (no hash URLs)
       document.querySelectorAll('.site-nav-link').forEach((link) => {
         link.addEventListener('click', (e) => {
@@ -619,6 +630,7 @@ made by yellowdevelopment
           requestAnimationFrame(() => {
             this.ensureBrowseVisible();
             this.updateNavFromScroll();
+            this.updateBrowseTint();
             ticking = false;
           });
           ticking = true;
@@ -626,17 +638,18 @@ made by yellowdevelopment
       };
       window.addEventListener('scroll', scrollHandler, { passive: true });
       this.updateNavFromScroll();
+      this.updateBrowseTint();
     },
   };
 
   const grid = {
     renderTimer: null,
-    buildItemsHtml(items, basePath) {
+    buildItemsHtml(items) {
       return items
         .map((g) => {
           if (!g || !g.url || !util.isDisplayable(g)) return '';
           const name = util.escapeHtml(util.formatDisplayName(g));
-          const hrefRaw = util.itemHref(g, basePath);
+          const hrefRaw = util.itemHref(g);
           const href = encodeURI(hrefRaw);
           const icon = util.iconPathFor(g);
           const isFav = favorites.has(href);
@@ -671,16 +684,10 @@ made by yellowdevelopment
 
       this.renderTimer = setTimeout(() => {
         this.renderTimer = null;
-        const cfg = CATEGORY_CONFIG[category];
-        if (!cfg) {
-          el.innerHTML = '';
-          return;
-        }
-
-        const items = cfg.list();
+        const items = categoryGames(category);
         let visibleCount = 0;
         if (!Array.isArray(items)) {
-          el.innerHTML = `<p class="browse-empty">${util.escapeHtml(cfg.failMsg)}</p>`;
+          el.innerHTML = '';
         } else {
           const visibleItems = items.filter((item) => util.isDisplayable(item));
           // Prepend custom games at the front
@@ -688,16 +695,16 @@ made by yellowdevelopment
           const allItems = [...customItems, ...visibleItems];
           visibleCount = allItems.length;
           if (allItems.length === 0) {
-            el.innerHTML = `<p class="browse-empty">${util.escapeHtml(cfg.emptyMsg)}</p>`;
+            el.innerHTML = '<p class="browse-empty">No games found.</p>';
           } else {
-            el.innerHTML = this.buildItemsHtml(allItems, cfg.basePath);
+            el.innerHTML = this.buildItemsHtml(allItems);
           }
         }
 
         // Update the titles count label
         const titlesLabel = document.getElementById('titlesCount');
         if (titlesLabel) {
-          const providerLabel = category === 'All Games' ? (window.nightLibrary?.label?.() || '') : '';
+          const providerLabel = window.nightLibrary?.label?.() || '';
           titlesLabel.textContent = providerLabel
             ? `Currently Showing ${visibleCount} Titles from ${providerLabel}`
             : `Currently Showing ${visibleCount} Titles`;
@@ -721,7 +728,7 @@ made by yellowdevelopment
     items: new Set(),
     init() {
       try {
-        const stored = localStorage.getItem('sienna_favs');
+        const stored = localStorage.getItem(KEYS.favorites);
         if (stored) {
           const saved = JSON.parse(stored);
           this.items = new Set(Array.isArray(saved) ? saved : []);
@@ -738,7 +745,7 @@ made by yellowdevelopment
       // Immediate visual feedback
       if (btnElement) btnElement.classList.toggle('active', this.items.has(url));
       
-      localStorage.setItem('sienna_favs', JSON.stringify(Array.from(this.items)));
+      localStorage.setItem(KEYS.favorites, JSON.stringify(Array.from(this.items)));
       this.render();
       
       // Update state in the main grid if the item exists there
@@ -759,22 +766,19 @@ made by yellowdevelopment
       section.classList.remove('hidden');
       
       // Find full data objects for favorited URLs
-      const allItems = [
-        ...(window.MAGES_GAMES || []).map(i => ({ ...i, base: 'mages/' })),
-        ...(window.APPS_ITEMS || []).map(i => ({ ...i, base: 'apps/' }))
-      ].filter((item) => util.isDisplayable(item));
+      const allItems = libraryCategories.flatMap((c) => c.games).filter((item) => util.isDisplayable(item));
 
       const favData = [];
       this.items.forEach(url => {
         const found = allItems.find(item => {
-          const resolved = util.itemHref(item, item.base);
+          const resolved = util.itemHref(item);
           return encodeURI(resolved) === url;
         });
         if (found) favData.push(found);
       });
 
       // Build the grid HTML safely
-      const html = favData.map(item => grid.buildItemsHtml([item], item.base)).join('');
+      const html = favData.map(item => grid.buildItemsHtml([item])).join('');
 
       el.innerHTML = html;
       iconLazyLoader.init();
@@ -828,8 +832,41 @@ made by yellowdevelopment
     },
   };
 
-  // infoPopup removed — credits moved to settings
+  const providerPicker = {
+    init() {
+      const rootEl = document.getElementById('browseProviderDropdown');
+      const btn = document.getElementById('browseProviderBtn');
+      const menu = document.getElementById('browseProviderMenu');
+      if (!rootEl || !btn || !menu) return;
 
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        rootEl.classList.toggle('open');
+      });
+
+      menu.addEventListener('click', (e) => {
+        const item = e.target.closest('.browse-dropdown-item');
+        if (!item) return;
+        const value = item.dataset.value;
+        rootEl.classList.remove('open');
+        if (value === window.siennaSettings?.state?.gamesProvider) return;
+        window.siennaSettings?.setGamesProvider?.(value);
+        this.update(value);
+      });
+
+      document.addEventListener('click', () => rootEl.classList.remove('open'));
+    },
+    update(provider) {
+      const label = document.getElementById('browseProviderLabel');
+      const menu = document.getElementById('browseProviderMenu');
+      if (label) label.textContent = provider;
+      if (menu) {
+        menu.querySelectorAll('.browse-dropdown-item').forEach((el) => {
+          el.classList.toggle('active', el.dataset.value === provider);
+        });
+      }
+    },
+  };
 
   const search = {
     input: null,
@@ -852,6 +889,7 @@ made by yellowdevelopment
     el: null,
     inner: null,
     dotsEl: null,
+    bg: null,
     pool: [],
     idx: 0,
     intervalId: null,
@@ -859,11 +897,9 @@ made by yellowdevelopment
     initialized: false,
     started: false,
     pickPool(category = activeCategory) {
-      const cfg = CATEGORY_CONFIG[category];
-      if (!cfg) return [];
-      const list = (cfg.list?.() || [])
+      const list = (categoryGames(category) || [])
         .filter((item) => item && util.isDisplayable(item))
-        .map((it) => ({ it, base: cfg.basePath || '' }));
+        .map((it) => ({ it }));
       if (!list.length) return [];
       const arr = list.slice();
       for (let i = arr.length - 1; i > 0; i--) {
@@ -874,13 +910,11 @@ made by yellowdevelopment
     },
     renderItem(wrapped) {
       const item = wrapped.it || wrapped;
-      const base = wrapped.base || 'mages/';
       const name = util.escapeHtml(util.formatDisplayName(item));
       const iconRaw = util.iconPathFor(item);
       const icon = iconRaw ? encodeURI(iconRaw) : '';
-      const href = encodeURI(util.itemHref(item, base)) || '#';
+      const href = encodeURI(util.itemHref(item)) || '#';
       const imgHtml = icon ? `<img class="featured-icon" src="${icon}" alt="${name}" loading="lazy">` : '';
-      const bgStyle = icon ? `style="background-image: url('${icon}');"` : '';
       const section = util.escapeHtml(item.section || 'N/A');
       const author = util.escapeHtml(item.author || 'N/A');
       const gameDataAttr = `data-game-data="${encodeURIComponent(JSON.stringify(item))}"`;
@@ -888,7 +922,6 @@ made by yellowdevelopment
       
       return `
         <div class="featured-slide" ${gameDataAttr}>
-          <div class="featured-bg" ${bgStyle}></div>
           <div class="featured-content">
             ${imgHtml}
             <div class="featured-meta">
@@ -906,6 +939,18 @@ made by yellowdevelopment
             </div>
           </div>
         </div>`;
+    },
+    applyBackground(wrapped) {
+      const bg = this.bg;
+      if (!bg) return;
+      const item = wrapped ? (wrapped.it || wrapped) : null;
+      const iconRaw = item ? util.iconPathFor(item) : '';
+      const icon = iconRaw ? encodeURI(iconRaw) : '';
+      bg.style.backgroundImage = icon ? `url("${icon}")` : '';
+      // Replay the fade-in animation for every new slide.
+      bg.classList.remove('fade-in');
+      void bg.offsetHeight;
+      bg.classList.add('fade-in');
     },
     renderDots() {
       if (!this.dotsEl) return;
@@ -952,6 +997,7 @@ made by yellowdevelopment
       slide.classList.remove('no-transition');
       slide.classList.add('active');
 
+      this.applyBackground(this.pool[this.idx]);
       this.updateDots();
     },
 
@@ -991,15 +1037,19 @@ made by yellowdevelopment
       this.resume();
     },
     reloadForCategory(category) {
+      if (!this.initialized) this.init();
       this.pause();
       this.pool = this.pickPool(category);
       this.idx = 0;
       if (!this.pool.length) {
         if (this.inner) this.inner.innerHTML = '';
         if (this.dotsEl) this.dotsEl.innerHTML = '';
+        if (this.bg) {
+          this.bg.classList.remove('fade-in');
+          this.bg.style.backgroundImage = '';
+        }
         return;
       }
-      if (!this.started) return;
       this.start();
     },
     ensureStarted() {
@@ -1012,9 +1062,9 @@ made by yellowdevelopment
       this.el = document.getElementById('featured');
       this.inner = document.getElementById('featuredInner');
       this.dotsEl = document.getElementById('featuredDots');
+      this.bg = document.getElementById('featuredBg');
       if (!this.el || !this.inner) return;
-      this.pool = this.pickPool(activeCategory);
-      if (!this.pool.length) return;
+
       // wire buttons
       const prevBtn = document.getElementById('featuredPrev');
       const nextBtn = document.getElementById('featuredNext');
@@ -1031,40 +1081,46 @@ made by yellowdevelopment
         }
       });
       this.initialized = true;
-      this.start();
+
+      // Start only once there is a library to feature.
+      this.pool = this.pickPool(activeCategory);
+      if (this.pool.length) this.start();
     },
   };
 
   // Expose the active game library so external providers (js/providers.js) can
   // swap the grid contents while keeping search, favorites and the game window.
   window.nightLibrary = {
-    baseGames: null,
     providerLabel: '',
 
     label() {
       return this.providerLabel;
     },
 
-    setGames(games, options = {}) {
-      if (!this.baseGames) this.baseGames = window.MAGES_GAMES; // built-in list
+    setLibrary(categories, options = {}) {
       this.providerLabel = options.label || '';
+      libraryCategories = Array.isArray(categories) ? categories : [];
+      activeCategory = libraryCategories[0]?.label || 'All Games';
 
-      // Providers only expose games, so drop night.'s category filter (its
-      // picker is hidden while a provider is active).
-      activeCategory = 'All Games';
+      const dropdown = document.getElementById('browseDropdown');
+      const divider = document.getElementById('browseHeadingDivider');
       const dropdownLabel = document.getElementById('browseDropdownLabel');
+      const menu = document.getElementById('browseDropdownMenu');
+
+      // Reflect the active provider in the provider picker.
+      if (this.providerLabel) providerPicker.update(this.providerLabel);
+
+      // Show the catalog picker (and its divider) only when there is more than one catalog.
+      const hasMultiple = libraryCategories.length > 1;
+      if (dropdown) dropdown.style.display = hasMultiple ? '' : 'none';
+      if (divider) divider.style.display = hasMultiple ? '' : 'none';
       if (dropdownLabel) dropdownLabel.textContent = activeCategory;
-      document.querySelectorAll('.browse-dropdown-item').forEach((item) => {
-        item.classList.toggle('active', item.dataset.value === activeCategory);
-      });
+      if (menu) {
+        menu.innerHTML = libraryCategories.map((c) => (
+          `<div class="browse-dropdown-item${c.label === activeCategory ? ' active' : ''}" role="option" data-value="${util.escapeHtml(c.label)}" aria-selected="${c.label === activeCategory}">${util.escapeHtml(c.label)}</div>`
+        )).join('');
+      }
 
-      window.MAGES_GAMES = Array.isArray(games) ? games : [];
-      this.refresh();
-    },
-
-    restore() {
-      if (this.baseGames) window.MAGES_GAMES = this.baseGames;
-      this.providerLabel = '';
       this.refresh();
     },
 
@@ -1308,25 +1364,7 @@ made by yellowdevelopment
     getGameHtmlBlobUrl(gameData) {
       if (!gameData || !gameData.html) return null;
       try {
-        // Inject a style to force black background so white text doesn't clash
-        let html = gameData.html;
-        const forcedBg = '<style>html, body { background: #000 !important; }</style>';
-        html = html.replace('<head>', '<head>' + forcedBg);
-
-        // Fix: ensure <base href> works correctly with blob URLs
-        // When HTML is loaded from a blob URL, relative <base href> paths
-        // resolve relative to the blob URL, not the intended CDN.
-        // We need to make sure the base href is absolute.
-        html = html.replace(
-          /<base\s+href=["']([^"']*)["']\s*\/?>/gi,
-          (match, href) => {
-            // If it's already absolute (http://, https://, //), keep it
-            if (/^(https?:)?\/\//i.test(href)) return match;
-            // If it's relative, resolve it against the current page origin
-            const resolved = new URL(href, window.location.origin).href;
-            return `<base href="${resolved}">`;
-          }
-        );
+        const html = util.absolutizeBaseHref(gameData.html);
 
         const blob = new Blob([html], { type: 'text/html' });
         return URL.createObjectURL(blob);
@@ -1336,11 +1374,24 @@ made by yellowdevelopment
       }
     },
 
+    showSettingsPanel() {
+      this.iframe.style.display = 'none';
+      let panel = document.getElementById('settingsPanel');
+      if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'settingsPanel';
+        panel.className = 'settings-panel';
+        this.container.appendChild(panel);
+      }
+      panel.style.display = 'block';
+      window.siennaSettings?.renderPanel();
+    },
+
     openSettings() {
       this.open('internal:settings', 'Settings');
     },
 
-    open(url, name = 'Game', gameData = null) {
+    async open(url, name = 'Game', gameData = null) {
       // Lazy-init if elements aren't captured yet to prevent race conditions
       if (!this.container || !this.iframe) {
         this.init();
@@ -1348,13 +1399,16 @@ made by yellowdevelopment
       if (!this.container || !this.iframe) return;
       const isSettings = url === 'internal:settings';
 
-      // Check if game has embedded HTML — use blob URL instead of file path
-      const blobUrl = this.getGameHtmlBlobUrl(gameData);
-      const resolvedUrl = isSettings ? url : (blobUrl || util.resolveUrl(url));
-      // Blob URLs are unique per play, so identify those tabs by the game's URL.
-      const tabKey = blobUrl && gameData?.url ? util.resolveUrl(gameData.url) : resolvedUrl;
-      const tab = this.addTab(resolvedUrl, name, gameData, tabKey);
+      // Provider games are raw HTML files on a CDN; we fetch their HTML and run
+      // it from a blob URL. Lumin games resolve a playable URL at open time.
+      // Everything else loads its URL directly.
+      const isLumin = !!(gameData && gameData._provider === 'lumin');
+      const needsHtml = !!(gameData && gameData._provider && !gameData.html && !isLumin);
 
+      // Blob URLs are unique per play, so identify provider tabs by the CDN URL.
+      const resolvedUrl = util.resolveUrl(url);
+      const tabKey = needsHtml && gameData?.url ? util.resolveUrl(gameData.url) : resolvedUrl;
+      const tab = this.addTab(resolvedUrl, name, gameData, tabKey);
 
       // If settings, we track the ID manually but don't save to array
       this.activeTabId = isSettings ? 'internal:settings' : (tab ? tab.id : null);
@@ -1373,25 +1427,44 @@ made by yellowdevelopment
       if (this.openBlankBtn) this.openBlankBtn.style.display = isSettings ? 'none' : '';
 
       if (isSettings) {
-        this.iframe.style.display = 'none';
-        let panel = document.getElementById('settingsPanel');
-        if (!panel) {
-          panel = document.createElement('div');
-          panel.id = 'settingsPanel';
-          panel.className = 'settings-panel';
-          this.container.appendChild(panel);
-        }
-        panel.style.display = 'block';
-        window.siennaSettings?.renderPanel();
+        this.showSettingsPanel();
       } else {
         this.iframe.style.display = 'block';
         const panel = document.getElementById('settingsPanel');
         if (panel) panel.style.display = 'none';
         this.startLoading();
         this.replaceIframe('about:blank');
-        requestAnimationFrame(() => {
-          if (this.iframe) this.iframe.src = resolvedUrl;
-        });
+
+        // The window is already visible, so fetch provider HTML in the
+        // background and swap the iframe over once it's ready.
+        const openedTabId = this.activeTabId;
+        let finalUrl = resolvedUrl;
+        if (isLumin) {
+          const luminUrl = await window.siennaProviders?.gameUrl?.(gameData);
+          if (luminUrl && this.activeTabId === openedTabId) {
+            finalUrl = luminUrl;
+            if (tab) tab._savedUrl = finalUrl;
+          }
+        } else if (needsHtml) {
+          const html = await window.siennaProviders?.gameHtml?.(gameData);
+          if (html && this.activeTabId === openedTabId) {
+            finalUrl = this.getGameHtmlBlobUrl({ ...gameData, html }) || resolvedUrl;
+            if (tab) {
+              tab.url = finalUrl;
+              tab._savedUrl = finalUrl;
+            }
+          }
+        } else {
+          finalUrl = this.getGameHtmlBlobUrl(gameData) || resolvedUrl;
+        }
+
+        // Only drive the iframe if this tab is still the active one (the user
+        // may have switched to another game while the HTML was downloading).
+        if (this.activeTabId === openedTabId) {
+          requestAnimationFrame(() => {
+            if (this.iframe) this.iframe.src = finalUrl;
+          });
+        }
       }
 
       if (tab) {
@@ -1399,7 +1472,6 @@ made by yellowdevelopment
       }
       this.saveTabsToStorage();
       this.renderDock();
-      document.body.classList.add('game-visor-open');
       window.siennaSettings?.apply();
     },
 
@@ -1435,7 +1507,6 @@ made by yellowdevelopment
         this.hideDock();
       }
       this.renderDock();
-      document.body.classList.remove('game-visor-open');
       window.siennaSettings?.apply();
     },
 
@@ -1465,7 +1536,6 @@ made by yellowdevelopment
 
       this.showDock();
       this.renderDock();
-      document.body.classList.remove('game-visor-open');
       window.siennaSettings?.apply();
     },
 
@@ -1480,16 +1550,7 @@ made by yellowdevelopment
 
       const isSettings = tab.url === 'internal:settings';
       if (isSettings) {
-        this.iframe.style.display = 'none';
-        let panel = document.getElementById('settingsPanel');
-        if (!panel) {
-          panel = document.createElement('div');
-          panel.id = 'settingsPanel';
-          panel.className = 'settings-panel';
-          this.container.appendChild(panel);
-        }
-        panel.style.display = 'block';
-        window.siennaSettings?.renderPanel();
+        this.showSettingsPanel();
       } else {
         this.iframe.style.display = 'block';
         const panel = document.getElementById('settingsPanel');
@@ -1509,7 +1570,6 @@ made by yellowdevelopment
       this.saveTabsToStorage();
       this.hideDock();
       this.renderDock();
-      document.body.classList.add('game-visor-open');
       window.siennaSettings?.apply();
     },
 
@@ -1596,13 +1656,6 @@ made by yellowdevelopment
 
       if (!url) return;
       window.siennaSettings?.handleCloak?.(url);
-    },
-
-    showInfo() {
-      if (!this.currentGameData) return;
-      const section = this.currentGameData.section || 'N/A';
-      const author = this.currentGameData.author || 'N/A';
-      alert(`Section: ${section}\nBy: ${author}`);
     },
 
     showInfoModal() {
@@ -1730,7 +1783,6 @@ made by yellowdevelopment
             this.container.classList.remove('open', 'minimized');
             this.replaceIframe('about:blank');
             this.updateTitleArea('Game', null);
-            document.body.classList.remove('game-visor-open');
             window.siennaSettings?.apply();
           }
           this.saveTabsToStorage();
@@ -1767,9 +1819,10 @@ made by yellowdevelopment
    * on a CDN, which browsers render as plain text, so their HTML is fetched first
    * and then run from a blob URL by gameVisor.
    */
-  const launchGame = async (url, name, gameData = null) => {
-    const html = await window.siennaProviders?.gameHtml?.(gameData);
-    gameVisor.open(url, name, html ? { ...gameData, html } : gameData);
+  const launchGame = (url, name, gameData = null) => {
+    // open() shows the window immediately and fetches provider HTML in the
+    // background before swapping the iframe over to a blob URL.
+    gameVisor.open(url, name, gameData);
   };
 
   function boot() {
@@ -1777,6 +1830,7 @@ made by yellowdevelopment
     customGames.initModal();
     opening.bind();
     dropdown.init();
+    providerPicker.init();
     search.init();
     gameVisor.init();
 
@@ -1888,22 +1942,5 @@ made by yellowdevelopment
     });
   }
 
-  // Ensure data is loaded from server endpoints if available. Falls back to any
-  // existing `window.MAGES_GAMES` / `window.APPS_ITEMS` (e.g., static mages.js).
-  (async function start() {
-    try {
-      if (!window.MAGES_GAMES) {
-        const r = await fetch('/mages.json');
-        if (r.ok) window.MAGES_GAMES = await r.json();
-      }
-      if (!window.APPS_ITEMS) {
-        const r2 = await fetch('/apps.json');
-        if (r2.ok) window.APPS_ITEMS = await r2.json();
-      }
-    } catch (e) {
-      // Network or server not present; fall back to embedded globals.
-      // (no-op)
-    }
-    boot();
-  }());
+  boot();
 })();

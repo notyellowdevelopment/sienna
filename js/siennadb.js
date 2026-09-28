@@ -44,82 +44,18 @@
     _failedAttempts: 0,
     _lockoutUntil: 0,
 
-    // ── Data gathering ──
-
-    async _gatherFullSaveData() {
-      return window.siennaSave.gatherFullSaveData();
-    },
-
-    _dumpIndexedDB(dbName) {
-      return window.siennaSave.dumpIndexedDB(dbName);
-    },
-
-    async _gatherIndexedDBFallback(data) {
-      return window.siennaSave.gatherIndexedDBFallback(data);
-    },
-
-    _restoreIndexedDB(dbs) {
-      return window.siennaSave.restoreIndexedDB(dbs);
-    },
-
-    _populateIndexedDB(dbName, stores) {
-      return window.siennaSave.populateIndexedDB(dbName, stores);
-    },
-
-    _restoreMarker() {
-      return window.siennaSave.restoreMarker();
-    },
-
-    _hasAutoRestored() {
-      return window.siennaSave.hasAutoRestored();
-    },
-
-    _markAutoRestored() {
-      return window.siennaSave.markAutoRestored();
-    },
-
-    _extractBackupPayload(value) {
-      return window.siennaSave.extractBackupPayload(value);
-    },
-
-    // ── Auth handling ──
-
-    _handleAuthFailure() {
-      return window.siennaSave.handleAuthFailure();
-    },
-
     // ── Sync status ──
-
-    _formatSyncStatus() {
-      return window.siennaSave.formatSyncStatus();
-    },
 
     _updateSyncStatus() {
       return window.siennaSave.updateSyncStatus();
     },
 
-    _markSynced() {
-      return window.siennaSave.markSynced();
-    },
-
-    // ── Cloud API ──
-
-    async _sendCloudBackup(payload) {
-      return window.siennaSave.sendCloudBackup(payload);
-    },
-
-    // ── Auto-sync ──
-
-    _startAutoSync() {
-      return window.siennaSave.startAutoSync();
+    _formatSyncStatus() {
+      return window.siennaSave.formatSyncStatus();
     },
 
     _stopAutoSync() {
       return window.siennaSave.stopAutoSync();
-    },
-
-    async _autoSyncNow() {
-      return window.siennaSave.autoSyncNow();
     },
 
     // ── Networking helpers (new) ──
@@ -601,14 +537,12 @@
 
       // Login modal
       const modalOverlay = document.getElementById('loginModalOverlay');
-      const closeBtn = document.getElementById('loginModalClose');
       const cancelBtn = document.getElementById('loginModalCancel');
       const submitBtn = document.getElementById('loginModalSubmit');
       const usernameInput = document.getElementById('loginModalUsername');
       const passwordInput = document.getElementById('loginModalPassword');
       const switchBtn = document.getElementById('loginModalSwitchBtn');
 
-      closeBtn?.addEventListener('click', () => this.hideLoginModal());
       cancelBtn?.addEventListener('click', () => this.hideLoginModal());
       submitBtn?.addEventListener('click', () => this.submit());
       modalOverlay?.addEventListener('click', (e) => {

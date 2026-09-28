@@ -46,36 +46,6 @@
     return saveConfig(config);
   }
 
-  // ---------- Show "Please Refresh" badge ----------
-  function showPleaseRefresh() {
-    let badge = document.getElementById('mm-refresh-badge');
-    if (!badge) {
-      badge = document.createElement('span');
-      badge.id = 'mm-refresh-badge';
-      badge.textContent = 'Please Refresh';
-      Object.assign(badge.style, {
-        background: '#f59e0b',       // unchanged
-        color: '#000',               // unchanged
-        fontWeight: '600',           // unchanged
-        fontSize: '9px',             // CHANGED: 10px → 9px (tighter, quieter)
-        padding: '2px 7px',          // CHANGED: 2px 8px → 2px 7px (slightly tighter)
-        borderRadius: '10px',        // CHANGED: 12px → 10px (less pill-like)
-        marginLeft: '12px',          // unchanged
-        letterSpacing: '0.5px',      // CHANGED: 0.3px → 0.5px (more precise tracking)
-        textTransform: 'uppercase'   // ADDED: reinforces the badge-label feel
-      });
-      const headerLeft = document.querySelector('#mm-coin-panel .mm-header-left');
-      if (headerLeft) headerLeft.appendChild(badge);
-    } else {
-      badge.style.display = 'inline-block';
-    }
-  }
-
-  function hidePleaseRefresh() {
-    const badge = document.getElementById('mm-refresh-badge');
-    if (badge) badge.style.display = 'none';
-  }
-
   // ---------- Draggable floating panel ----------
   function createPanel() {
     removePanel();
@@ -271,7 +241,7 @@
       if (setCoins(newVal)) {
         balanceSpan.textContent = newVal;
         input.value = newVal;
-        // CHANGED: removed showPleaseRefresh() call — badge replaced by inline toast message
+        // Badge replaced by inline toast message
         const t = document.createElement('div');
         t.textContent = `✓ Changes should be applied`; // CHANGED: was "✓ Coins set to ${newVal}"
         Object.assign(t.style, {
